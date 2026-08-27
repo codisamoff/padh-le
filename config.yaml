@@ -1,0 +1,15 @@
+camera:
+  index: 0
+  width: 640
+  height: 480
+  fps: 20
+
+face_detection:
+  model_path: "assets/models/face_landmarker.task"
+  min_face_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  num_faces: 1
+
+ui:
+  show_camera: true
+  show_landmarks: true
