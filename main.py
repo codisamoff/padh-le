@@ -1,13 +1,30 @@
+import os
+import sys
 import time
+import math
 import yaml
 import cv2
 import pygame
-import math
-import subprocess
-import threading
-import tempfile
-import os
-import queue
+
+from detection.face_detector import FaceDetector
+
+
+# ============================================================
+# PATH HANDLING
+# ============================================================
+
+def resource_path(relative_path):
+    """
+    Return the correct absolute path for both:
+    1. Normal Python execution
+    2. PyInstaller Windows executable
+    """
+    if getattr(sys, "frozen", False):
+        base_path = os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, relative_path)
 
 
 # ============================================================
@@ -16,175 +33,49 @@ import queue
 
 EYES_CLOSED_DELAY = 2.0
 NO_FACE_DELAY = 2.0
-PHONE_DELAY = 1.0
 
 EYE_CLOSED_THRESHOLD = 0.20
 
-UTH_JAA_SOUND = "assets/sounds/uth_jaa.mp3"
-DEKH_DEKH_SOUND = "assets/sounds/arvind_dekh.mp3"
-PHONE_SOUND = "assets/sounds/padhle.mp3"
-
-YOLO_WORKER = ".venv/bin/python"
-PHONE_WORKER = "detection/phone_worker.py"
+UTH_JAA_SOUND = resource_path("assets/sounds/uth_jaa.mp3")
+DEKH_DEKH_SOUND = resource_path("assets/sounds/arvind_dekh.mp3")
 
 
 # ============================================================
 # LOAD CONFIG
 # ============================================================
 
-with open("config.yaml") as f:
+CONFIG_PATH = resource_path("config.yaml")
+
+if not os.path.exists(CONFIG_PATH):
+    raise FileNotFoundError(
+        f"Could not find config.yaml at:\n{CONFIG_PATH}"
+    )
+
+with open(CONFIG_PATH, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
-cam_cfg = config["camera"]
-face_cfg = config["face_detection"]
-
 
 # ============================================================
-# AUDIO MANAGER
+# AUDIO
 # ============================================================
 
-class AudioManager:
+pygame.mixer.init()
 
-    def __init__(self):
-        pygame.mixer.init()
+try:
+    uth_jaa = pygame.mixer.Sound(UTH_JAA_SOUND)
+    dekh_dekh = pygame.mixer.Sound(DEKH_DEKH_SOUND)
 
-        self.sounds = {
-            "eyes_closed": pygame.mixer.Sound(UTH_JAA_SOUND),
-            "face_missing": pygame.mixer.Sound(DEKH_DEKH_SOUND),
-            "phone": pygame.mixer.Sound(PHONE_SOUND),
-        }
+    print("Audio loaded successfully.")
 
-        self.lock = threading.Lock()
-        self.playing = False
-
-    def play(self, name):
-
-        with self.lock:
-
-            if self.playing:
-                return False
-
-            self.playing = True
-
-        thread = threading.Thread(
-            target=self._play_worker,
-            args=(name,),
-            daemon=True
-        )
-
-        thread.start()
-
-        return True
-
-    def _play_worker(self, name):
-
-        try:
-
-            sound = self.sounds[name]
-
-            print(f"🔊 Playing: {name}")
-
-            sound.play()
-
-            while pygame.mixer.get_busy():
-                time.sleep(0.05)
-
-        finally:
-
-            with self.lock:
-                self.playing = False
-
-    def is_playing(self):
-
-        with self.lock:
-            return self.playing
-
-    def close(self):
-
-        pygame.mixer.quit()
-
-
-# ============================================================
-# PHONE DETECTOR
-# ============================================================
-
-class PhoneWorker:
-
-    def __init__(self):
-
-        self.process = subprocess.Popen(
-            [
-                YOLO_WORKER,
-                PHONE_WORKER
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1
-        )
-
-        # Wait for worker startup
-        while True:
-
-            line = self.process.stdout.readline().strip()
-
-            if line == "PHONE_WORKER_READY":
-
-                print("📱 Phone detector ready.")
-
-                break
-
-            if not line:
-                break
-
-    def detect(self, frame):
-
-        # Save current frame temporarily
-        fd, path = tempfile.mkstemp(
-            suffix=".jpg",
-            dir="/tmp"
-        )
-
-        os.close(fd)
-
-        try:
-
-            cv2.imwrite(path, frame)
-
-            self.process.stdin.write(path + "\n")
-            self.process.stdin.flush()
-
-            result = self.process.stdout.readline().strip()
-
-            return result == "PHONE"
-
-        finally:
-
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
-    def close(self):
-
-        try:
-
-            self.process.stdin.write("QUIT\n")
-            self.process.stdin.flush()
-
-        except Exception:
-            pass
-
-        try:
-            self.process.terminate()
-        except Exception:
-            pass
+except Exception as e:
+    raise RuntimeError(f"Could not load audio: {e}")
 
 
 # ============================================================
 # CAMERA
 # ============================================================
+
+cam_cfg = config["camera"]
 
 cap = cv2.VideoCapture(cam_cfg["index"])
 
@@ -204,7 +95,6 @@ cap.set(
 )
 
 if not cap.isOpened():
-
     raise RuntimeError(
         f"Could not open camera index {cam_cfg['index']}"
     )
@@ -214,24 +104,18 @@ if not cap.isOpened():
 # FACE DETECTOR
 # ============================================================
 
-from detection.face_detector import FaceDetector
+face_cfg = config["face_detection"]
 
 detector = FaceDetector(
-    model_path=face_cfg["model_path"],
+    model_path=resource_path(face_cfg["model_path"]),
     num_faces=face_cfg["num_faces"],
-    min_detection_confidence=
-        face_cfg["min_face_detection_confidence"],
-    min_tracking_confidence=
-        face_cfg["min_tracking_confidence"],
+    min_detection_confidence=(
+        face_cfg["min_face_detection_confidence"]
+    ),
+    min_tracking_confidence=(
+        face_cfg["min_tracking_confidence"]
+    ),
 )
-
-
-# ============================================================
-# START SYSTEMS
-# ============================================================
-
-audio = AudioManager()
-phone_detector = PhoneWorker()
 
 
 # ============================================================
@@ -258,11 +142,10 @@ RIGHT_EYE = [
 
 
 # ============================================================
-# MATH
+# EAR CALCULATION
 # ============================================================
 
 def distance(p1, p2):
-
     return math.sqrt(
         (p1[0] - p2[0]) ** 2 +
         (p1[1] - p2[1]) ** 2
@@ -275,11 +158,9 @@ def eye_aspect_ratio(
     width,
     height
 ):
-
     points = []
 
     for index in eye_indices:
-
         lm = landmarks[index]
 
         points.append(
@@ -307,41 +188,41 @@ def eye_aspect_ratio(
     if horizontal == 0:
         return 0.0
 
-    return (
+    ear = (
         vertical_1 +
         vertical_2
     ) / (2.0 * horizontal)
 
+    return ear
+
 
 # ============================================================
-# STATE
+# STATE VARIABLES
 # ============================================================
 
 no_face_since = None
 eyes_closed_since = None
-phone_since = None
 
 no_face_alert_played = False
 eyes_closed_alert_played = False
-phone_alert_played = False
 
 prev_time = time.time()
 
 
 # ============================================================
-# START
+# STARTUP
 # ============================================================
 
 print()
 print("==========================================")
-print("              PADH LE")
+print("        SMART STUDY MONITOR")
 print("==========================================")
 print()
-print("👤 Face missing  -> ARVIND DEKH")
-print("👁️ Eyes closed   -> UTH JAA")
-print("📱 Phone detected -> PADHLE")
+print("Face missing  -> dekh-dekh sound")
+print("Eyes closed   -> uth-jaa sound")
 print()
-print("Sounds will NEVER overlap.")
+print(f"Face delay: {NO_FACE_DELAY} seconds")
+print(f"Eyes delay: {EYES_CLOSED_DELAY} seconds")
 print()
 print("Press Q to quit.")
 print()
@@ -358,21 +239,19 @@ try:
         ret, frame = cap.read()
 
         if not ret:
-
-            print("Failed to read camera frame.")
+            print("Failed to read frame.")
             break
 
         h, w = frame.shape[:2]
 
-        # ----------------------------------------------------
-        # FACE
-        # ----------------------------------------------------
+
+        # ====================================================
+        # DETECT FACE
+        # ====================================================
 
         result = detector.detect(frame)
 
-        face_found = bool(
-            result.face_landmarks
-        )
+        face_found = bool(result.face_landmarks)
 
 
         # ====================================================
@@ -383,12 +262,17 @@ try:
 
             landmarks = result.face_landmarks[0]
 
+
+            # ------------------------------------------------
+            # RESET FACE-MISSING STATE
+            # ------------------------------------------------
+
             no_face_since = None
             no_face_alert_played = False
 
 
             # ------------------------------------------------
-            # EYES
+            # CALCULATE EAR
             # ------------------------------------------------
 
             left_ear = eye_aspect_ratio(
@@ -410,6 +294,11 @@ try:
                 right_ear
             ) / 2.0
 
+
+            # ------------------------------------------------
+            # DETERMINE EYE STATE
+            # ------------------------------------------------
+
             eyes_closed = (
                 average_ear <
                 EYE_CLOSED_THRESHOLD
@@ -423,13 +312,17 @@ try:
             if eyes_closed:
 
                 if eyes_closed_since is None:
-
                     eyes_closed_since = time.time()
 
                 closed_duration = (
                     time.time() -
                     eyes_closed_since
                 )
+
+
+                # ---------------------------------------------
+                # PLAY UTH JAA
+                # ---------------------------------------------
 
                 if (
                     closed_duration >=
@@ -438,14 +331,20 @@ try:
                     not eyes_closed_alert_played
                 ):
 
-                    if audio.play("eyes_closed"):
+                    print(
+                        "Eyes closed -> "
+                        "playing UTH JAA"
+                    )
 
+                    try:
+                        uth_jaa.play()
+                    except Exception as e:
                         print(
-                            "👁️ Eyes closed -> "
-                            "UTH JAA"
+                            f"Could not play UTH JAA: {e}"
                         )
 
-                        eyes_closed_alert_played = True
+                    eyes_closed_alert_played = True
+
 
                 eye_status = "EYES CLOSED"
                 eye_color = (0, 0, 255)
@@ -465,52 +364,7 @@ try:
 
 
             # =================================================
-            # PHONE DETECTION
-            # =================================================
-
-            phone_found = phone_detector.detect(frame)
-
-
-            if phone_found:
-
-                if phone_since is None:
-
-                    phone_since = time.time()
-
-                phone_duration = (
-                    time.time() -
-                    phone_since
-                )
-
-                if (
-                    phone_duration >= PHONE_DELAY
-                    and
-                    not phone_alert_played
-                ):
-
-                    if audio.play("phone"):
-
-                        print(
-                            "📱 PHONE DETECTED -> "
-                            "PADHLE"
-                        )
-
-                        phone_alert_played = True
-
-                phone_status = "PHONE DETECTED"
-                phone_color = (0, 0, 255)
-
-            else:
-
-                phone_since = None
-                phone_alert_played = False
-
-                phone_status = "NO PHONE"
-                phone_color = (0, 255, 0)
-
-
-            # =================================================
-            # FACE BOX
+            # DRAW FACE BOX / LANDMARKS
             # =================================================
 
             if config["ui"]["show_landmarks"]:
@@ -531,6 +385,7 @@ try:
                 y_min = int(min(ys))
                 y_max = int(max(ys))
 
+
                 cv2.rectangle(
                     frame,
                     (x_min, y_min),
@@ -539,6 +394,8 @@ try:
                     2
                 )
 
+
+                # Draw eye landmarks
 
                 for index in LEFT_EYE + RIGHT_EYE:
 
@@ -557,7 +414,7 @@ try:
 
 
             # =================================================
-            # UI
+            # STATUS
             # =================================================
 
             cv2.putText(
@@ -575,27 +432,17 @@ try:
                 eye_status,
                 (10, 60),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
+                0.75,
                 eye_color,
                 2
             )
 
             cv2.putText(
                 frame,
-                phone_status,
+                f"EAR: {average_ear:.3f}",
                 (10, 90),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                phone_color,
-                2
-            )
-
-            cv2.putText(
-                frame,
-                f"EAR: {average_ear:.3f}",
-                (10, 120),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
+                0.65,
                 (255, 255, 255),
                 2
             )
@@ -607,15 +454,19 @@ try:
 
         else:
 
+            # ------------------------------------------------
+            # RESET EYE STATE
+            # ------------------------------------------------
+
             eyes_closed_since = None
             eyes_closed_alert_played = False
 
-            phone_since = None
-            phone_alert_played = False
 
+            # ------------------------------------------------
+            # START FACE-MISSING TIMER
+            # ------------------------------------------------
 
             if no_face_since is None:
-
                 no_face_since = time.time()
 
             no_face_duration = (
@@ -624,6 +475,10 @@ try:
             )
 
 
+            # ------------------------------------------------
+            # PLAY DEKH-DEKH
+            # ------------------------------------------------
+
             if (
                 no_face_duration >=
                 NO_FACE_DELAY
@@ -631,15 +486,24 @@ try:
                 not no_face_alert_played
             ):
 
-                if audio.play("face_missing"):
+                print(
+                    "Student not detected -> "
+                    "playing DEKH DEKH"
+                )
 
+                try:
+                    dekh_dekh.play()
+                except Exception as e:
                     print(
-                        "👤 Student missing -> "
-                        "ARVIND DEKH"
+                        f"Could not play DEKH DEKH: {e}"
                     )
 
-                    no_face_alert_played = True
+                no_face_alert_played = True
 
+
+            # ------------------------------------------------
+            # STATUS
+            # ------------------------------------------------
 
             cv2.putText(
                 frame,
@@ -669,8 +533,7 @@ try:
         now = time.time()
 
         fps = (
-            1.0 /
-            (now - prev_time)
+            1.0 / (now - prev_time)
             if now > prev_time
             else 0.0
         )
@@ -690,7 +553,7 @@ try:
 
 
         # ====================================================
-        # SHOW
+        # SHOW CAMERA
         # ====================================================
 
         cv2.imshow(
@@ -699,23 +562,25 @@ try:
         )
 
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        # ====================================================
+        # QUIT
+        # ====================================================
 
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
 
+# ============================================================
+# CLEANUP
+# ============================================================
+
 finally:
-
-    print()
-    print("Stopping Padh Le...")
-
-    phone_detector.close()
-    audio.close()
-
-    detector.close()
 
     cap.release()
 
     cv2.destroyAllWindows()
 
-    print("Stopped.")
+    pygame.mixer.quit()
+
+    print()
+    print("Padh Le stopped.")
