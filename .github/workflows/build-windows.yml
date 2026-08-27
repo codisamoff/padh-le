@@ -27,7 +27,7 @@ jobs:
 
       - name: Build Padh Le
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed `
+          pyinstaller --noconfirm --clean --onedir --console `
             --name PadhLe `
             --add-data "assets;assets" `
             --add-data "yolo11n.pt;." `
@@ -40,5 +40,5 @@ jobs:
       - name: Upload Padh Le
         uses: actions/upload-artifact@v4
         with:
-          name: PadhLe-Windows
+          name: PadhLe-Windows-Debug
           path: dist/PadhLe/
