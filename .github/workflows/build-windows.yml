@@ -20,25 +20,85 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        shell: powershell
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-app.txt
           pip install pyinstaller
 
-      - name: Build Padh Le
+      - name: Verify required files
+        shell: powershell
         run: |
-          pyinstaller --noconfirm --clean --onedir --console `
+          Write-Host "Checking project files..."
+
+          if (!(Test-Path "main.py")) {
+            throw "main.py not found"
+          }
+
+          if (!(Test-Path "config.yaml")) {
+            throw "config.yaml not found"
+          }
+
+          if (!(Test-Path "yolo11n.pt")) {
+            throw "yolo11n.pt not found"
+          }
+
+          if (!(Test-Path "assets")) {
+            throw "assets directory not found"
+          }
+
+          if (!(Test-Path "assets/models/face_landmarker.task")) {
+            throw "face_landmarker.task not found"
+          }
+
+          Write-Host "All required files found."
+
+      - name: Build Padh Le
+        shell: powershell
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onedir `
+            --windowed `
             --name PadhLe `
             --add-data "assets;assets" `
+            --add-data "config.yaml;." `
             --add-data "yolo11n.pt;." `
             --hidden-import pygame `
             --hidden-import cv2 `
             --hidden-import mediapipe `
+            --hidden-import mediapipe.tasks `
+            --hidden-import mediapipe.tasks.python `
+            --hidden-import mediapipe.tasks.python.vision `
             --hidden-import ultralytics `
+            --collect-all mediapipe `
+            --collect-all ultralytics `
             main.py
+
+      - name: Verify Windows executable
+        shell: powershell
+        run: |
+          if (!(Test-Path "dist/PadhLe/PadhLe.exe")) {
+            throw "PadhLe.exe was not created"
+          }
+
+          Write-Host "PadhLe.exe successfully created."
+
+          Get-ChildItem "dist/PadhLe" -Recurse |
+            Select-Object FullName, Length
+
+      - name: Create ZIP
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path "dist/PadhLe/*" `
+            -DestinationPath "PadhLe-Windows.zip" `
+            -Force
 
       - name: Upload Padh Le
         uses: actions/upload-artifact@v4
         with:
-          name: PadhLe-Windows-Debug
-          path: dist/PadhLe/
+          name: PadhLe-Windows
+          path: PadhLe-Windows.zip
+          retention-days: 30
