@@ -1,0 +1,23 @@
+[1mdiff --git a/.github/workflows/build-windows.yml b/.github/workflows/build-windows.yml[m
+[1mindex 4ef1f45..f6ebfab 100644[m
+[1m--- a/.github/workflows/build-windows.yml[m
+[1m+++ b/.github/workflows/build-windows.yml[m
+[36m@@ -23,8 +23,7 @@[m [mjobs:[m
+         shell: powershell[m
+         run: |[m
+           python -m pip install --upgrade pip[m
+[31m-          pip install -r requirements-app.txt[m
+[31m-          pip install pyinstaller[m
+[32m+[m[32m          pip install -r requirements-dev.txt[m
+ [m
+       - name: Verify required files[m
+         shell: powershell[m
+[36m@@ -60,7 +59,7 @@[m [mjobs:[m
+             --noconfirm `[m
+             --clean `[m
+             --onedir `[m
+[31m-            --windowed `[m
+[32m+[m[32m            --console `[m
+             --name PadhLe `[m
+             --add-data "assets;assets" `[m
+             --add-data "config.yaml;." `[m

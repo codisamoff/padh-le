@@ -1,8 +1,9 @@
 import sys
 import cv2
 from ultralytics import YOLO
+from resource_paths import resource_path
 
-MODEL = "yolo11n.pt"
+MODEL = str(resource_path("yolo11n.pt"))
 
 model = YOLO(MODEL)
 
@@ -53,4 +54,3 @@ while True:
             break
 
     print("PHONE" if phone_found else "NO_PHONE", flush=True)
-

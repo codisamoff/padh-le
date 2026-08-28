@@ -1,0 +1,2 @@
+# Development dependencies for Padh Le.
+# Runtime dependencies are installed by setup.sh.

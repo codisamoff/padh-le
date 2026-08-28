@@ -4,15 +4,15 @@ from resource_paths import resource_path
 
 class PhoneDetector:
     """
-    Accurate phone detector optimized for CPU.
+    Fast phone detector.
 
-    YOLO runs at 480px instead of 640px to balance
-    detection accuracy and performance.
+    YOLO is intentionally run at a smaller image size because
+    phone detection does not need the full 640x480 frame resolution.
     """
 
     PHONE_CLASS_ID = 67
 
-    def __init__(self, model_path=None, confidence=0.35):
+    def __init__(self, model_path=None, confidence=0.25):
         model_file = (
             resource_path("yolo11n.pt")
             if model_path is None
@@ -24,19 +24,16 @@ class PhoneDetector:
 
     def detect(self, frame):
         """
-        Returns True only when YOLO detects a cell phone
-        above the configured confidence threshold.
+        Returns True when a cell phone is detected.
         """
 
         results = self.model.predict(
             source=frame,
             conf=self.confidence,
-            imgsz=480,
+            imgsz=320,
             device="cpu",
             verbose=False,
         )
-
-        best_confidence = 0.0
 
         for result in results:
             if result.boxes is None:
@@ -47,12 +44,8 @@ class PhoneDetector:
 
                 if class_id == self.PHONE_CLASS_ID:
                     confidence = float(box.conf[0])
-                    best_confidence = max(
-                        best_confidence,
-                        confidence,
-                    )
 
-        if best_confidence >= self.confidence:
-            return True
+                    if confidence >= self.confidence:
+                        return True
 
         return False

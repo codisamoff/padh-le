@@ -1,0 +1,19 @@
+Metadata-Version: 2.2
+Name: padh-le
+Version: 1.0.0
+Summary: Padh Le desktop study monitor using webcam face and eye detection
+Requires-Python: >=3.11,<3.12
+Requires-Dist: mediapipe==0.10.21
+Requires-Dist: numpy==1.26.4
+Requires-Dist: opencv-contrib-python==4.10.0.84
+Requires-Dist: PyYAML==6.0.2
+Requires-Dist: pygame==2.6.1
+Requires-Dist: ultralytics==8.3.0
+Requires-Dist: jax==0.4.30
+Requires-Dist: jaxlib==0.4.30
+Requires-Dist: protobuf==4.25.3
+Requires-Dist: torch==2.4.1
+Requires-Dist: torchvision==0.19.1
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

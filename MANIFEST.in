@@ -1,0 +1,3 @@
+include config.yaml
+include yolo11n.pt
+recursive-include assets *

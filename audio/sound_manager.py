@@ -4,6 +4,8 @@ import threading
 import queue
 import pygame
 
+from resource_paths import resource_path
+
 
 class SoundManager:
     """
@@ -14,8 +16,8 @@ class SoundManager:
     after the current sound has completely finished.
     """
 
-    def __init__(self, sounds_dir="assets/sounds"):
-        self.sounds_dir = sounds_dir
+    def __init__(self, sounds_dir=None):
+        self.sounds_dir = str(resource_path("assets/sounds") if sounds_dir is None else sounds_dir)
 
         self.sound_queue = queue.Queue()
         self.running = True

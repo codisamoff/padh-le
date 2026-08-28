@@ -1,0 +1,199 @@
+import os
+import time
+import threading
+import pygame
+
+
+class WarningController:
+    """
+    Controls all warning sounds.
+
+    Rules:
+    - Only one warning plays at a time.
+    - A new warning immediately interrupts the old warning.
+    - Active conditions can continuously replay their warning.
+    - When a condition becomes false, the current sound is allowed
+      to finish, but it will not be replayed.
+    """
+
+    def __init__(self, sounds_dir):
+        self.sounds_dir = str(sounds_dir)
+
+        self.sounds = {}
+        self.active_event = None
+        self.active_sound = None
+
+        self.conditions = {
+            "eyes_closed": False,
+            "face_missing": False,
+            "phone_detected": False,
+        }
+
+        self.last_played = {}
+        self.cooldowns = {
+            "eyes_closed": 0.5,
+            "face_missing": 0.5,
+            "phone_detected": 0.5,
+        }
+
+        self.running = True
+        self.lock = threading.Lock()
+
+        pygame.mixer.init()
+
+        self.worker = threading.Thread(
+            target=self._worker,
+            daemon=True,
+        )
+        self.worker.start()
+
+    def _get_sound(self, filename):
+        if filename not in self.sounds:
+            path = os.path.join(self.sounds_dir, filename)
+
+            if not os.path.exists(path):
+                raise FileNotFoundError(
+                    f"Sound file not found: {path}"
+                )
+
+            self.sounds[filename] = pygame.mixer.Sound(path)
+
+        return self.sounds[filename]
+
+    def set_condition(self, event_name, active, filename):
+        """
+        Tell the controller whether a condition is currently active.
+
+        If active=True:
+            The warning will play/replay.
+
+        If active=False:
+            The warning will not replay anymore.
+            If it is currently playing, it is allowed to finish.
+        """
+
+        with self.lock:
+            self.conditions[event_name] = active
+
+            if active:
+                now = time.monotonic()
+
+                last = self.last_played.get(event_name, 0)
+                cooldown = self.cooldowns.get(event_name, 0.5)
+
+                # If another warning is currently playing,
+                # immediately replace it with this warning.
+                if self.active_event != event_name:
+                    self._play_new_warning(
+                        event_name,
+                        filename,
+                    )
+                    self.last_played[event_name] = now
+
+                # If this same warning is not currently playing,
+                # allow it to start again.
+                elif not pygame.mixer.get_busy():
+                    if now - last >= cooldown:
+                        self._play_new_warning(
+                            event_name,
+                            filename,
+                        )
+                        self.last_played[event_name] = now
+
+    def _play_new_warning(self, event_name, filename):
+        """
+        Immediately stop the current warning and play the new one.
+        """
+
+        try:
+            pygame.mixer.stop()
+        except Exception:
+            pass
+
+        try:
+            sound = self._get_sound(filename)
+
+            print(
+                f"[WARNING] {event_name} -> "
+                f"playing {filename}"
+            )
+
+            sound.play()
+
+            self.active_event = event_name
+            self.active_sound = sound
+
+        except Exception as e:
+            print(
+                f"[WARNING AUDIO ERROR] {e}"
+            )
+
+    def _worker(self):
+        """
+        Monitors the currently playing sound.
+
+        When a sound finishes:
+        - if its condition is still active, replay it
+        - otherwise leave audio stopped
+        """
+
+        while self.running:
+            time.sleep(0.05)
+
+            with self.lock:
+                if self.active_event is None:
+                    continue
+
+                if pygame.mixer.get_busy():
+                    continue
+
+                event = self.active_event
+
+                # If condition is still active,
+                # replay the warning continuously.
+                if self.conditions.get(event, False):
+                    if self.active_sound is not None:
+                        try:
+                            print(
+                                f"[WARNING] {event} still active "
+                                "-> replaying"
+                            )
+
+                            self.active_sound.play()
+
+                        except Exception as e:
+                            print(
+                                f"[WARNING AUDIO ERROR] {e}"
+                            )
+
+                else:
+                    # Condition ended.
+                    print(
+                        f"[WARNING] {event} cleared"
+                    )
+
+                    self.active_event = None
+                    self.active_sound = None
+
+    def stop_all(self):
+        """
+        Stop audio immediately.
+        """
+
+        with self.lock:
+            try:
+                pygame.mixer.stop()
+            except Exception:
+                pass
+
+            self.active_event = None
+            self.active_sound = None
+
+    def close(self):
+        self.running = False
+
+        try:
+            pygame.mixer.stop()
+            pygame.mixer.quit()
+        except Exception:
+            pass

@@ -220,11 +220,6 @@ PHONE_DETECTION_INTERVAL = 5
 phone_frame_counter = 0
 phone_found = False
 
-# Require repeated detections to reduce false positives.
-phone_detection_history = []
-PHONE_HISTORY_SIZE = 3
-PHONE_REQUIRED_DETECTIONS = 2
-
 
 # ============================================================
 # STARTUP
@@ -274,28 +269,7 @@ try:
             phone_frame_counter = 0
 
             try:
-                current_phone_detection = phone_detector.detect(frame)
-
-                # Store the latest YOLO result.
-                phone_detection_history.append(
-                    current_phone_detection
-                )
-
-                # Keep only the latest N results.
-                if len(phone_detection_history) > PHONE_HISTORY_SIZE:
-                    phone_detection_history.pop(0)
-
-                # Confirm phone only when it appears in enough
-                # recent YOLO checks.
-                detection_count = sum(
-                    phone_detection_history
-                )
-
-                phone_found = (
-                    detection_count >=
-                    PHONE_REQUIRED_DETECTIONS
-                )
-
+                phone_found = phone_detector.detect(frame)
             except Exception as error:
                 print(f"[PHONE DETECTOR ERROR] {error}")
                 phone_found = False
@@ -573,22 +547,11 @@ try:
         else:
 
             # ------------------------------------------------
-            # STUDENT IS NOT DETECTED
-            #
-            # IMPORTANT:
-            # If the student disappears while their eyes were
-            # closed, immediately clear the eyes_closed warning.
-            # Face-missing has priority over eye-closed.
+            # RESET EYE STATE
             # ------------------------------------------------
 
             eyes_closed_since = None
             eyes_closed_alert_played = False
-
-            warning_controller.set_condition(
-                "eyes_closed",
-                False,
-                "uth_jaa.mp3",
-            )
 
 
             # ------------------------------------------------

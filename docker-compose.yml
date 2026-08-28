@@ -1,0 +1,20 @@
+services:
+  padhle:
+    build:
+      context: .
+    image: padhle:latest
+    environment:
+      DISPLAY: ${DISPLAY}
+      XAUTHORITY: /tmp/.Xauthority
+      PULSE_SERVER: unix:/tmp/pulse/native
+      SDL_AUDIODRIVER: ${SDL_AUDIODRIVER:-pulse}
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/snd:/dev/snd
+    group_add:
+      - "${VIDEO_GID:-44}"
+      - "${AUDIO_GID:-29}"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY}:/tmp/.Xauthority:ro
+      - ${XDG_RUNTIME_DIR}/pulse/native:/tmp/pulse/native

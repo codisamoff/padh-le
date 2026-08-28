@@ -1,0 +1,59 @@
+from ultralytics import YOLO
+from resource_paths import resource_path
+
+
+class PhoneDetector:
+    """
+    CPU-optimized phone detector.
+
+    YOLO is intentionally kept lightweight because this system
+    runs without CUDA.
+    """
+
+    PHONE_CLASS_ID = 67
+
+    def __init__(
+        self,
+        model_path=None,
+        confidence=0.25,
+    ):
+        self.model = YOLO(
+            str(
+                resource_path("yolo11n.pt")
+                if model_path is None
+                else model_path
+            )
+        )
+
+        self.confidence = confidence
+
+    def detect(self, frame):
+        """
+        Returns True when a cell phone is detected.
+        """
+
+        results = self.model.predict(
+            source=frame,
+            conf=self.confidence,
+            imgsz=320,
+            verbose=False,
+            device="cpu",
+        )
+
+        for result in results:
+
+            if result.boxes is None:
+                continue
+
+            for box in result.boxes:
+
+                class_id = int(box.cls[0])
+                confidence = float(box.conf[0])
+
+                if (
+                    class_id == self.PHONE_CLASS_ID
+                    and confidence >= self.confidence
+                ):
+                    return True
+
+        return False

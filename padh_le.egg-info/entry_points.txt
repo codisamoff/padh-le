@@ -1,0 +1,2 @@
+[console_scripts]
+padhle = padhle_launcher:main
